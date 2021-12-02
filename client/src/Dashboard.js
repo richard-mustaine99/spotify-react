@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import useAuth from "./useAuth"
 import Player from "./Player"
 import TrackSearchResult from "./TrackSearchResult"
+import RecentlyPlayedTracks from "./RecentlyPlayedTracks"
 import { Container, Form } from "react-bootstrap"
 import SpotifyWebApi from "spotify-web-api-node"
 import axios from "axios"
@@ -14,6 +15,7 @@ export default function Dashboard({ code }) {
   const accessToken = useAuth(code) //Se verirfica que el token esté activo
   const [search, setSearch] = useState("")
   const [searchResults, setSearchResults] = useState([]) //Se setea la busqueda en vacio
+  const [history, setHistory] = useState([]) //Se setea la busqueda en vacio
   const [playingTrack, setPlayingTrack] = useState()
   const [lyrics, setLyrics] = useState("")
 
@@ -21,6 +23,37 @@ export default function Dashboard({ code }) {
     setPlayingTrack(track)
     setSearch("")
     setLyrics("")
+  }
+
+  function refreshHistory(){
+    spotifyApi.getMyRecentlyPlayedTracks({
+      limit : 20
+    }).then(function(data) {
+      // Output items
+      console.log("Las ultimas 20 canciones reproducidas son:");
+      setHistory(
+        data.body.items.map(items => {
+          // console.log(items.track.id)
+          const smallestAlbumImage = items.track.album.images.reduce(
+            (smallest, image) => {
+              if (image.height < smallest.height) return image
+              return smallest
+            },
+            items.track.album.images[0]
+          )
+          return {
+            artist: items.track.artists[0].name,
+            album: items.track.album.name,
+            title: items.track.name,
+            id: items.track.id,
+            albumUrl: smallestAlbumImage.url,
+          }
+        })
+      )
+    }, function(err) {
+      console.log('Algo malió sal', err);
+    });
+    
   }
 
   useEffect(() => {
@@ -35,6 +68,7 @@ export default function Dashboard({ code }) {
       })
       .then(res => {
         setLyrics(res.data.lyrics)
+        refreshHistory() 
       })
   }, [playingTrack])
 
@@ -78,31 +112,92 @@ export default function Dashboard({ code }) {
     return () => (cancel = true)
   }, [search, accessToken])
 
+
+  // Obtener las ultimas canciones reproducidas
+  useEffect(() => {
+    if (!accessToken) return 
+
+  spotifyApi.getMyRecentlyPlayedTracks({
+    limit : 20
+  }).then(function(data) {
+    // Output items
+    console.log("Las ultimas 20 canciones reproducidas son:");
+    // console.log("darta",data)
+    setHistory(
+      data.body.items.map(items => {
+        // console.log(items.track.id)
+        const smallestAlbumImage = items.track.album.images.reduce(
+          (smallest, image) => {
+            if (image.height < smallest.height) return image
+            return smallest
+          },
+          items.track.album.images[0]
+        )
+        return {
+          artist: items.track.artists[0].name,
+          album: items.track.album.name,
+          title: items.track.name,
+          id: items.track.id,
+          albumUrl: smallestAlbumImage.url,
+        }
+      })
+    )
+  }, function(err) {
+    console.log('Algo malió sal', err);
+  });
+
+  }, [accessToken])
+
   return (
-    <Container className="d-flex flex-column py-2" style={{ height: "100vh" }}>
-      <Form.Control
-        type="search"
-        placeholder="Buscar Canción/Álbum/Artista"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-      />
-      <div className="flex-grow-1 my-2" style={{ overflowY: "auto" }}>
-        {searchResults.map(track => (
-          <TrackSearchResult
-            track={track}
-            key={track.uri}
-            chooseTrack={chooseTrack}
+      <Container className="d-flex flex-column py-2" style={{ height: "100vh"}}>
+        {/* Buscador */}
+        <div>
+          <Form.Control
+            type="search"
+            placeholder="Buscar Canción/Álbum/Artista"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className={"flex-grow-1 my-2"}
           />
-        ))}
-        {searchResults.length === 0 && (
-          <div className="text-center" style={{ whiteSpace: "pre" }}>
-            {lyrics}
+        </div>
+        {/* Reproductor */}
+        <div className="flex-grow-1 my-2" >
+          <Player accessToken={accessToken} trackUri={playingTrack?.uri} />
+        </div>
+        <Container className="d-flex flex-row py-2" style={{ height: "100vh" }}>
+          <Container className="d-flex flex-column py-2" style={{ height: "100vh" }}>
+            <div className="flex-grow-1 my-2" style={{ overflowY: "auto" }}>
+              {searchResults.map(track => (
+                console.log("track",track),
+                <TrackSearchResult
+                  track={track}
+                  // key={track.uri}
+                  chooseTrack={chooseTrack}
+                  // onChange={event => handleSelect(event)}
+                />
+              ))}
+              {/* Letra */}
+              {searchResults.length === 0 && (
+                <div className="text-center" style={{ whiteSpace: "pre" }}>
+                  {lyrics}
+                </div>
+              )}
+            </div>
+            
+          </Container>
+          {/* Historial */}
+          <div className="flex-grow-1 my-2" style={{ overflowY: "auto", height: "50vh" }}>
+            <h6>Últimas 20 canciones escuchadas</h6>
+            {history.map(item => (
+              console.log("song",item),
+              <RecentlyPlayedTracks
+                track={item}
+                // key={item.id}
+              />
+            ))}
           </div>
-        )}
-      </div>
-      <div>
-        <Player accessToken={accessToken} trackUri={playingTrack?.uri} />
-      </div>
-    </Container>
+        </Container>
+      </Container>
+    
   )
 }
